@@ -61,13 +61,14 @@ $ python3 find_unused_resources.py /your-project-root
 
 ## 排除目录
 
-默认排除以下目录，不参与扫描：
+默认排除以下目录 `EXCLUDE_DIRS `，不参与扫描：
 
 - `oh_modules`
 - `node_modules`
 - `.hvigor`
 - `build`
 - `.preview`
+- `AppScope`
 
 
 

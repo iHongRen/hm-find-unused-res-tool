@@ -2,7 +2,7 @@
 """分析 HarmonyOS 项目中未使用的资源。
 
 资源存储在 src/main/resources/base/media/ 目录，
-通过 $r('app.media.xxx') 和 $rawfile('xxx') 方式引用。
+通过 $r('app.media.xxx') 、 $rawfile('xxx') 、 getRawFileContent('xxx') 方式引用。
 
 用法:
     python3 find_unused_resources.py [项目根目录]
@@ -32,10 +32,9 @@ RESOURCE_EXTENSIONS = {
     # 字体
     '.ttf', '.otf',
     # 其他
-    '.json', 'txt', '.pdf', '.docx', '.xlsx', '.pptx', '.svg', '.zip',
+    '.json', '.txt', '.pdf', '.docx', '.xlsx', '.pptx', '.zip',
 }
-SOURCE_EXTENSIONS = {'.ets', '.ts'}
-EXCLUDE_DIRS = {'oh_modules', 'node_modules', '.hvigor', 'build', '.preview'}
+EXCLUDE_DIRS = {'oh_modules', 'node_modules', '.hvigor', 'build', '.preview', 'AppScope'}
 
 # ─── 字体 ───
 MONO_FONT = 'Consolas' if sys.platform == 'win32' else 'Menlo'
@@ -226,6 +225,11 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
                 continue
             static_refs.add(name)
 
+    # JSON 配置文件引用："[reslib].media.xxx" 或 "[xxx].media.xxx"
+    module_media_pattern = re.compile(r'["\']\[[\w]+\]\.media\.(\w+)["\']')
+    for match in module_media_pattern.finditer(content):
+        static_refs.add(match.group(1))
+
     rawfile_pattern = re.compile(r'\$rawfile\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
     for match in rawfile_pattern.finditer(content):
         rawfile_refs.add(match.group(1))
@@ -234,20 +238,33 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
     for match in get_rawfile_pattern.finditer(content):
         rawfile_refs.add(match.group(1))
 
-    # 兜底：源码中出现 rawfile 文件名即视为被引用（排除注释行）
+    # rawfile 路径引用：如 JSON/XML 中的 "rawfile/images/icon.png"
+    rawfile_path_pattern = re.compile(r'["\']rawfile/([^"\']+)["\']')
+    for match in rawfile_path_pattern.finditer(content):
+        rawfile_refs.add(match.group(1))
+
+    # 兜底：源码/配置中出现 rawfile 文件名即视为被引用（排除注释行）
     if rawfile_names:
+        suffix = filepath.suffix.lower()
+        is_config_file = suffix in {'.json', '.json5', '.xml'}
         for name in rawfile_names:
             for line in lines:
                 if name not in line:
                     continue
-                comment_idx = line.find('//')
-                if comment_idx == -1:
+                if is_config_file:
+                    # 配置文件无 // 注释，直接视为引用
                     rawfile_refs.add(name)
                     break
-                name_idx = line.index(name)
-                if name_idx < comment_idx:
-                    rawfile_refs.add(name)
-                    break
+                else:
+                    # 源码排除 // 注释行
+                    comment_idx = line.find('//')
+                    if comment_idx == -1:
+                        rawfile_refs.add(name)
+                        break
+                    name_idx = line.index(name)
+                    if name_idx < comment_idx:
+                        rawfile_refs.add(name)
+                        break
 
     return {'static_refs': static_refs, 'prefix_refs': prefix_refs,
             'traced_refs': traced_refs, 'rawfile_refs': rawfile_refs,
@@ -261,8 +278,6 @@ def find_all_references(root_dir: Path, rawfile_names: set[str] = None):
     for dirpath, dirnames, filenames in os.walk(root_dir):
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
         for filename in filenames:
-            if Path(filename).suffix.lower() not in SOURCE_EXTENSIONS:
-                continue
             filepath = Path(dirpath) / filename
             rel_src = str(filepath.relative_to(root_dir))
             result = extract_refs_from_file(filepath, root_dir, rawfile_names)
@@ -524,7 +539,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
 
     # 用 tree+headings：#0 树列放分类标题和"序号 文件名"，无独立序号列
     columns = ('size', 'path', 'status')
-    tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', selectmode='browse')
+    tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', selectmode='extended')
 
     tree.heading('#0', text='  分类 / 文件名')
     tree.heading('size', text='大小')
@@ -624,8 +639,8 @@ def show_action_window(result: dict, root_dir: Path) -> None:
 
     def _open_selected():
         sel = tree.selection()
-        if not sel:
-            return
+        if not sel or len(sel) != 1:
+            return  # 只在单选时打开
         iid = sel[0]
         if iid in iid_to_item:
             item = iid_to_item[iid]
@@ -643,51 +658,70 @@ def show_action_window(result: dict, root_dir: Path) -> None:
         sel = tree.selection()
         if not sel:
             return
-        iid = sel[0]
-        if iid not in iid_to_item:
+        # 过滤出可删除的项目（未删除且有路径）
+        deletable = [(iid, iid_to_item[iid]) for iid in sel
+                     if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None]
+        if not deletable:
             return
-        item = iid_to_item[iid]
-        if item['deleted'] or item['path'] is None:
+        # 确认对话框
+        count = len(deletable)
+        if count == 1:
+            item = deletable[0][1]
+            msg = f'确定要删除 {item["path"].name} 吗？\n\n{item["path"]}'
+        else:
+            msg = f'确定要删除选中的 {count} 个文件吗？\n\n此操作不可撤销。'
+        if not messagebox.askyesno('确认删除', msg):
             return
-        if not messagebox.askyesno('确认删除',
-                                    f'确定要删除 {item["path"].name} 吗？\n\n{item["path"]}'):
-            return
-        try:
-            item['path'].unlink()
-            item['deleted'] = True
-            vals = list(tree.item(iid, 'values'))
-            vals[2] = '已删除'
-            tree.item(iid, values=vals, tags=('deleted',))
-            _update_deleted_count()
-        except Exception as e:
-            messagebox.showerror('删除失败', str(e))
+        # 批量删除
+        failed = []
+        for iid, item in deletable:
+            try:
+                item['path'].unlink()
+                item['deleted'] = True
+                vals = list(tree.item(iid, 'values'))
+                vals[2] = '已删除'
+                tree.item(iid, values=vals, tags=('deleted',))
+            except Exception as e:
+                failed.append(f'{item["path"].name}: {e}')
+        _update_deleted_count()
+        if failed:
+            messagebox.showerror('部分删除失败', '\n'.join(failed))
 
     def _copy_name():
         sel = tree.selection()
         if not sel:
             return
-        iid = sel[0]
-        if iid in iid_to_item:
-            item = iid_to_item[iid]
-            copy_text = item['path'].name if item['path'] is not None else item['name']
-        elif iid in dyn_iid_to_path:
-            copy_text = dyn_iid_to_path[iid].name
-        else:
-            return
-        root.clipboard_clear()
-        root.clipboard_append(copy_text)
+        copy_list = []
+        for iid in sel:
+            if iid in iid_to_item:
+                item = iid_to_item[iid]
+                copy_list.append(item['path'].name if item['path'] is not None else item['name'])
+            elif iid in dyn_iid_to_path:
+                copy_list.append(dyn_iid_to_path[iid].name)
+        if copy_list:
+            root.clipboard_clear()
+            root.clipboard_append('\n'.join(copy_list))
 
     def _on_rclick(event):
         row = tree.identify_row(event.y)
         if not row or (row not in iid_to_item and row not in dyn_iid_to_path):
             return
-        tree.selection_set(row)
+        # 如果右键点击的行不在当前选择中，重新选择该行
+        if row not in tree.selection():
+            tree.selection_set(row)
+        sel = tree.selection()
+        deletable_count = sum(1 for iid in sel
+                             if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None)
         ctx_menu.delete(0, 'end')
-        ctx_menu.add_command(label='打开定位', command=_open_selected)
-        ctx_menu.add_command(label='复制名称', command=_copy_name)
-        if row in iid_to_item:
-            item = iid_to_item[row]
-            if item['path'] is not None and not item['deleted']:
+        if len(sel) > 1:
+            # 多选：只显示删除选项
+            if deletable_count > 0:
+                ctx_menu.add_command(label=f'删除 ({deletable_count} 项)', command=_delete_selected)
+        else:
+            # 单选：完整菜单
+            ctx_menu.add_command(label='打开定位', command=_open_selected)
+            ctx_menu.add_command(label='复制名称', command=_copy_name)
+            if deletable_count > 0:
                 ctx_menu.add_separator()
                 ctx_menu.add_command(label='删除文件', command=_delete_selected)
         ctx_menu.post(event.x_root, event.y_root)
@@ -765,7 +799,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
                              fg=C_ACCENT_RED, bg=C_BG)
     deleted_label.pack(side='left', padx=(8, 0))
 
-    tk.Label(footer, text='双击打开  ·  右键菜单  ·  ⌫ Delete 删除',
+    tk.Label(footer, text='双击打开  ·  多选: Cmd/Ctrl+点击  ·  右键菜单  ·  ⌫ Delete 删除',
              font=('TkDefaultFont', 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='right')
 
     def _update_deleted_count():
