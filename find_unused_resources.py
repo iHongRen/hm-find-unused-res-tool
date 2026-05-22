@@ -535,7 +535,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
     except Exception:
         pass  # 图标设置失败不影响主功能
 
-    items = result['all_items']
+    state = {'result': result, 'items': result['all_items']}
 
     # ── 导出功能 ──
     def _export_report():
@@ -558,21 +558,21 @@ def show_action_window(result: dict, root_dir: Path) -> None:
         lines.append(f'')
         lines.append(f'统计概览')
         lines.append(f'{"-" * 40}')
-        lines.append(f'media 资源: {result["media_count"]} 个')
-        lines.append(f'rawfile 资源: {result["rawfile_count"]} 个')
-        lines.append(f'静态引用: {result["static_count"]} 个')
-        lines.append(f'前缀引用: {result["prefix_count"]} 个')
-        lines.append(f'变量引用: {result["traced_count"]} 个')
-        lines.append(f'rawfile 引用: {result["rawfile_ref_count"]} 个')
-        lines.append(f'未使用 media: {result["unused_media_count"]} 个')
-        lines.append(f'未使用 rawfile: {result["unused_rawfile_count"]} 个')
-        lines.append(f'前缀匹配: {result["pot_count"]} 个')
-        lines.append(f'引用缺失: {result["missing_count"]} 个')
-        lines.append(f'资源总大小: {format_size(result["total_resource_size"])}')
-        lines.append(f'可释放空间: {format_size(result["total_unused"])}')
+        lines.append(f'media 资源: {state["result"]["media_count"]} 个')
+        lines.append(f'rawfile 资源: {state["result"]["rawfile_count"]} 个')
+        lines.append(f'静态引用: {state["result"]["static_count"]} 个')
+        lines.append(f'前缀引用: {state["result"]["prefix_count"]} 个')
+        lines.append(f'变量引用: {state["result"]["traced_count"]} 个')
+        lines.append(f'rawfile 引用: {state["result"]["rawfile_ref_count"]} 个')
+        lines.append(f'未使用 media: {state["result"]["unused_media_count"]} 个')
+        lines.append(f'未使用 rawfile: {state["result"]["unused_rawfile_count"]} 个')
+        lines.append(f'前缀匹配: {state["result"]["pot_count"]} 个')
+        lines.append(f'引用缺失: {state["result"]["missing_count"]} 个')
+        lines.append(f'资源总大小: {format_size(state["result"]["total_resource_size"])}')
+        lines.append(f'可释放空间: {format_size(state["result"]["total_unused"])}')
         lines.append(f'')
         cat_map = {}
-        for item in items:
+        for item in state['items']:
             cat = item.get('category', '其他')
             cat_map.setdefault(cat, []).append(item)
         for cat_key, (_, _, cat_label) in CAT_COLORS.items():
@@ -588,10 +588,10 @@ def show_action_window(result: dict, root_dir: Path) -> None:
                 status = '已删除' if item['deleted'] else ('文件不存在' if item['path'] is None else '')
                 lines.append(f'  {name:<40} {size:>10}  {path}  {status}')
             lines.append(f'')
-        if result['dynamic_contexts']:
-            lines.append(f'无法追踪的动态引用（{len(result["dynamic_contexts"])} 条，需人工确认）')
+        if state['result']['dynamic_contexts']:
+            lines.append(f'无法追踪的动态引用（{len(state["result"]["dynamic_contexts"])} 条，需人工确认）')
             lines.append(f'{"-" * 40}')
-            for desc, line_content in result['dynamic_contexts']:
+            for desc, line_content in state['result']['dynamic_contexts']:
                 lines.append(f'  {desc}')
                 lines.append(f'    {line_content}')
             lines.append(f'')
@@ -615,324 +615,384 @@ def show_action_window(result: dict, root_dir: Path) -> None:
     export_btn.pack(side='right', padx=(0, 10))
     export_btn.bind('<Button-1>', lambda e: _export_report())
 
-    # ── 统计面板 ──
-    _build_stats_panel(root, result)
+    # ── 重新扫描 ──
+    def _rescan():
+        scan_btn.configure(fg=C_TEXT_SEC)
+        export_btn.configure(fg=C_TEXT_SEC)
+        # 清空内容区，显示扫描提示
+        for w in container.winfo_children():
+            w.destroy()
+        scan_label = tk.Label(container, text='正在扫描…', font=('TkDefaultFont', 12),
+                              fg=C_ACCENT_BLUE, bg=C_BG)
+        scan_label.pack(expand=True)
 
-    # ── Treeview 样式 ──
-    style = ttk.Style()
-    style.theme_use('clam')
-    style.configure('Treeview',
-                    background='#ffffff',
-                    foreground=C_TEXT,
-                    fieldbackground='#ffffff',
-                    rowheight=ROW_H,
-                    font=('TkDefaultFont', 10),
-                    borderwidth=0,
-                    relief='flat',
-                    indent=10)
-    style.configure('Treeview.Heading',
-                    background='#e8edf4',
-                    foreground=C_TEXT,
-                    font=('TkDefaultFont', 10, 'bold'),
-                    relief='flat',
-                    padding=(8, 6))
-    style.map('Treeview.Heading',
-              background=[('active', '#d0dae8')])
-    style.map('Treeview',
-              background=[('selected', '#d6e4f0')],
-              foreground=[('selected', C_TEXT)])
-    # 滚动条
-    style.configure('Sbar.Vertical.TScrollbar',
-                    width=14,
-                    borderwidth=0,
-                    relief='flat',
-                    troughcolor=C_BG,
-                    background='#c0c0c0',
-                    arrowsize=12)
-    style.map('Sbar.Vertical.TScrollbar',
-              background=[('active', '#a0a0a0'),
-                          ('pressed', '#909090')])
+        res_box = [None, None]
 
-    # ── Treeview ──
-    tree_frame = tk.Frame(root, bg=C_BG)
-    tree_frame.pack(fill='both', expand=True, padx=PAD_X, pady=(4, 0))
-
-    # 用 tree+headings：#0 树列放分类标题和"序号 文件名"，无独立序号列
-    columns = ('size', 'path', 'status')
-    tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', selectmode='extended')
-
-    tree.heading('#0', text='  分类 / 文件名')
-    tree.heading('size', text='大小')
-    tree.heading('path', text='路径')
-    tree.heading('status', text='状态')
-
-    tree.column('#0', width=320, minwidth=200, anchor='w', stretch=True)
-    tree.column('size', width=90, minwidth=70, anchor='w', stretch=False)
-    tree.column('path', width=700, minwidth=200, anchor='w', stretch=True)
-    tree.column('status', width=100, minwidth=80, anchor='e', stretch=False)
-
-    # ── 标签 ──
-    tree.tag_configure('even', background=C_ROW_EVEN)
-    tree.tag_configure('odd', background=C_ROW_ODD)
-    tree.tag_configure('deleted', background='#f5f5f5', foreground=C_ROW_DELETED)
-    tree.tag_configure('hover', background=C_ROW_HOVER)
-    tree.tag_configure('missing', foreground=C_ACCENT_RED)
-
-    for cat_key, (bg_color, accent, label_text) in CAT_COLORS.items():
-        tree.tag_configure(f'cat_{cat_key}', background=bg_color, foreground='#333333',
-                           font=('TkDefaultFont', 10, 'bold'))
-
-    tree.tag_configure('dyn_header', background='#fff5f0', foreground='#8b4513',
-                       font=('TkDefaultFont', 10, 'bold'))
-    tree.tag_configure('dyn', background='#fffaf7', foreground=C_TEXT_SEC,
-                       font=(MONO_FONT, 9))
-
-    scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview,
-                              style='Sbar.Vertical.TScrollbar')
-    tree.configure(yscrollcommand=scrollbar.set)
-
-    # ── 填充数据：分类为父节点，数据项为子节点 ──
-    iid_to_item = {}
-    last_cat = None
-    cat_iid = None
-    row_seq = 0
-
-    # 预计算各分类数量
-    cat_counts = {}
-    for item in items:
-        c = item.get('category', '')
-        cat_counts[c] = cat_counts.get(c, 0) + 1
-
-    for item in items:
-        cat = item.get('category', '')
-        if cat != last_cat:
-            last_cat = cat
-            _, _, label_text = CAT_COLORS.get(cat, ('#e8e8e8', '#666', cat))
-            count = cat_counts.get(cat, 0)
-            cat_iid = tree.insert('', 'end',
-                                 text=f' {label_text}（{count}）',
-                                 values=('', '', ''),
-                                 tags=(f'cat_{cat}',))
-            row_seq = 0
-
-        is_missing = item['path'] is None
-        rel_path = str(item['path'].relative_to(root_dir)) if not is_missing else ', '.join(item.get('sources', []))
-        size_str = format_size(item['size']) if not is_missing else '-'
-        display_name = f"{item['name']}{item['path'].suffix}" if not is_missing else item['name']
-        status_text = '文件不存在' if is_missing else ('已删除' if item['deleted'] else '')
-
-        if item['deleted']:
-            row_tags = ('deleted',)
-        elif is_missing:
-            row_tags = ('missing', 'odd' if row_seq % 2 else 'even')
-        else:
-            row_tags = ('odd' if row_seq % 2 else 'even',)
-
-        iid = tree.insert(cat_iid, 'end',
-                         text=f'{item["index"]}      {display_name}',
-                         values=(size_str, rel_path, status_text),
-                         tags=row_tags)
-        iid_to_item[iid] = item
-        row_seq += 1
-
-    # 动态引用区域 — 父节点为标题，子节点为各条引用
-    dyn_iid_to_path = {}
-    dynamic_contexts = result['dynamic_contexts']
-    if dynamic_contexts:
-        dyn_parent = tree.insert('', 'end',
-                                text=f' ⚠ 无法追踪的动态引用（{len(dynamic_contexts)} 条，需人工确认）',
-                                values=('', '', ''),
-                                tags=('dyn_header',))
-        for dc in dynamic_contexts:
-            desc, line_content = dc
-            file_rel = desc.split(':')[0]
-            abs_path = root_dir / file_rel
-            if len(line_content) > 50:
-                wrapped_code = line_content[:50] + '\n' + line_content[50:100]
-            else:
-                wrapped_code = line_content
-            iid = tree.insert(dyn_parent, 'end',
-                             text=f' {wrapped_code}',
-                             values=('', desc, ''),
-                             tags=('dyn',))
-            dyn_iid_to_path[iid] = abs_path
-
-    # 展开所有分类节点
-    for node in tree.get_children():
-        tree.item(node, open=True)
-
-    # ── 操作：右键菜单 + 键盘快捷键 ──
-    ctx_menu = tk.Menu(root, tearoff=0, font=('TkDefaultFont', 10))
-
-    def _open_selected():
-        sel = tree.selection()
-        if not sel or len(sel) != 1:
-            return  # 只在单选时打开
-        iid = sel[0]
-        if iid in iid_to_item:
-            item = iid_to_item[iid]
-            if item['path'] is not None and not item['deleted']:
-                open_in_file_manager(item['path'])
-            elif item['path'] is None:
-                sources = item.get('sources', [])
-                if sources:
-                    src_path = root_dir / sources[0]
-                    open_in_file_manager(src_path)
-        elif iid in dyn_iid_to_path:
-            open_in_file_manager(dyn_iid_to_path[iid])
-
-    def _delete_selected():
-        sel = tree.selection()
-        if not sel:
-            return
-        # 过滤出可删除的项目（未删除且有路径）
-        deletable = [(iid, iid_to_item[iid]) for iid in sel
-                     if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None]
-        if not deletable:
-            return
-        # 确认对话框
-        count = len(deletable)
-        if count == 1:
-            item = deletable[0][1]
-            msg = f'确定要删除 {item["path"].name} 吗？\n\n{item["path"]}'
-        else:
-            msg = f'确定要删除选中的 {count} 个文件吗？\n\n此操作不可撤销。'
-        if not messagebox.askyesno('确认删除', msg):
-            return
-        # 批量删除
-        failed = []
-        for iid, item in deletable:
+        def _do():
             try:
-                item['path'].unlink()
-                item['deleted'] = True
-                vals = list(tree.item(iid, 'values'))
-                vals[2] = '已删除'
-                tree.item(iid, values=vals, tags=('deleted',))
+                res_box[0] = analyze(root_dir)
             except Exception as e:
-                failed.append(f'{item["path"].name}: {e}')
-        _update_deleted_count()
-        if failed:
-            messagebox.showerror('部分删除失败', '\n'.join(failed))
+                res_box[1] = e
 
-    def _copy_name():
-        sel = tree.selection()
-        if not sel:
-            return
-        copy_list = []
-        for iid in sel:
+        t = threading.Thread(target=_do, daemon=True)
+        t.start()
+
+        def _poll():
+            if t.is_alive():
+                root.after(100, _poll)
+                return
+            if res_box[1]:
+                scan_btn.configure(fg=C_ACCENT_BLUE)
+                export_btn.configure(fg=C_ACCENT_BLUE)
+                messagebox.showerror('扫描失败', str(res_box[1]))
+                return
+            state['result'] = res_box[0]
+            state['items'] = res_box[0]['all_items']
+            _build_content()
+            scan_btn.configure(fg=C_ACCENT_BLUE)
+            export_btn.configure(fg=C_ACCENT_BLUE)
+
+        _poll()
+
+    scan_btn = tk.Label(title_bar, text='重新扫描', font=('TkDefaultFont', 9),
+                        bg=C_BG, fg=C_ACCENT_BLUE)
+    scan_btn.pack(side='right', padx=(0, 10))
+    scan_btn.bind('<Button-1>', lambda e: _rescan())
+
+    # ── 内容区容器 ──
+    container = tk.Frame(root, bg=C_BG)
+    container.pack(fill='both', expand=True)
+
+    def _build_content():
+        """清空并重建内容区（统计面板 + 列表 + 底部栏）。"""
+        for w in container.winfo_children():
+            w.destroy()
+
+        # ── 统计面板 ──
+        _build_stats_panel(container, state['result'])
+
+        # ── Treeview 样式 ──
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('Treeview',
+                        background='#ffffff',
+                        foreground=C_TEXT,
+                        fieldbackground='#ffffff',
+                        rowheight=ROW_H,
+                        font=('TkDefaultFont', 10),
+                        borderwidth=0,
+                        relief='flat',
+                        indent=10)
+        style.configure('Treeview.Heading',
+                        background='#e8edf4',
+                        foreground=C_TEXT,
+                        font=('TkDefaultFont', 10, 'bold'),
+                        relief='flat',
+                        padding=(8, 6))
+        style.map('Treeview.Heading',
+                  background=[('active', '#d0dae8')])
+        style.map('Treeview',
+                  background=[('selected', '#d6e4f0')],
+                  foreground=[('selected', C_TEXT)])
+        # 滚动条
+        style.configure('Sbar.Vertical.TScrollbar',
+                        width=14,
+                        borderwidth=0,
+                        relief='flat',
+                        troughcolor=C_BG,
+                        background='#c0c0c0',
+                        arrowsize=12)
+        style.map('Sbar.Vertical.TScrollbar',
+                  background=[('active', '#a0a0a0'),
+                              ('pressed', '#909090')])
+
+        # ── Treeview ──
+        tree_frame = tk.Frame(container, bg=C_BG)
+        tree_frame.pack(fill='both', expand=True, padx=PAD_X, pady=(4, 0))
+
+        # 用 tree+headings：#0 树列放分类标题和"序号 文件名"，无独立序号列
+        columns = ('size', 'path', 'status')
+        tree = ttk.Treeview(tree_frame, columns=columns, show='tree headings', selectmode='extended')
+
+        tree.heading('#0', text='  分类 / 文件名')
+        tree.heading('size', text='大小')
+        tree.heading('path', text='路径')
+        tree.heading('status', text='状态')
+
+        tree.column('#0', width=320, minwidth=200, anchor='w', stretch=True)
+        tree.column('size', width=90, minwidth=70, anchor='w', stretch=False)
+        tree.column('path', width=700, minwidth=200, anchor='w', stretch=True)
+        tree.column('status', width=100, minwidth=80, anchor='e', stretch=False)
+
+        # ── 标签 ──
+        tree.tag_configure('even', background=C_ROW_EVEN)
+        tree.tag_configure('odd', background=C_ROW_ODD)
+        tree.tag_configure('deleted', background='#f5f5f5', foreground=C_ROW_DELETED)
+        tree.tag_configure('hover', background=C_ROW_HOVER)
+        tree.tag_configure('missing', foreground=C_ACCENT_RED)
+
+        for cat_key, (bg_color, accent, label_text) in CAT_COLORS.items():
+            tree.tag_configure(f'cat_{cat_key}', background=bg_color, foreground='#333333',
+                               font=('TkDefaultFont', 10, 'bold'))
+
+        tree.tag_configure('dyn_header', background='#fff5f0', foreground='#8b4513',
+                           font=('TkDefaultFont', 10, 'bold'))
+        tree.tag_configure('dyn', background='#fffaf7', foreground=C_TEXT_SEC,
+                           font=(MONO_FONT, 9))
+
+        scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview,
+                                  style='Sbar.Vertical.TScrollbar')
+        tree.configure(yscrollcommand=scrollbar.set)
+
+        # ── 填充数据：分类为父节点，数据项为子节点 ──
+        iid_to_item = {}
+        last_cat = None
+        cat_iid = None
+        row_seq = 0
+
+        # 预计算各分类数量
+        cat_counts = {}
+        for item in state['items']:
+            c = item.get('category', '')
+            cat_counts[c] = cat_counts.get(c, 0) + 1
+
+        for item in state['items']:
+            cat = item.get('category', '')
+            if cat != last_cat:
+                last_cat = cat
+                _, _, label_text = CAT_COLORS.get(cat, ('#e8e8e8', '#666', cat))
+                count = cat_counts.get(cat, 0)
+                cat_iid = tree.insert('', 'end',
+                                     text=f' {label_text}（{count}）',
+                                     values=('', '', ''),
+                                     tags=(f'cat_{cat}',))
+                row_seq = 0
+
+            is_missing = item['path'] is None
+            rel_path = str(item['path'].relative_to(root_dir)) if not is_missing else ', '.join(item.get('sources', []))
+            size_str = format_size(item['size']) if not is_missing else '-'
+            display_name = f"{item['name']}{item['path'].suffix}" if not is_missing else item['name']
+            status_text = '文件不存在' if is_missing else ('已删除' if item['deleted'] else '')
+
+            if item['deleted']:
+                row_tags = ('deleted',)
+            elif is_missing:
+                row_tags = ('missing', 'odd' if row_seq % 2 else 'even')
+            else:
+                row_tags = ('odd' if row_seq % 2 else 'even',)
+
+            iid = tree.insert(cat_iid, 'end',
+                             text=f'{item["index"]}      {display_name}',
+                             values=(size_str, rel_path, status_text),
+                             tags=row_tags)
+            iid_to_item[iid] = item
+            row_seq += 1
+
+        # 动态引用区域 — 父节点为标题，子节点为各条引用
+        dyn_iid_to_path = {}
+        dynamic_contexts = result['dynamic_contexts']
+        if dynamic_contexts:
+            dyn_parent = tree.insert('', 'end',
+                                    text=f' ⚠ 无法追踪的动态引用（{len(dynamic_contexts)} 条，需人工确认）',
+                                    values=('', '', ''),
+                                    tags=('dyn_header',))
+            for dc in dynamic_contexts:
+                desc, line_content = dc
+                file_rel = desc.split(':')[0]
+                abs_path = root_dir / file_rel
+                if len(line_content) > 50:
+                    wrapped_code = line_content[:50] + '\n' + line_content[50:100]
+                else:
+                    wrapped_code = line_content
+                iid = tree.insert(dyn_parent, 'end',
+                                 text=f' {wrapped_code}',
+                                 values=('', desc, ''),
+                                 tags=('dyn',))
+                dyn_iid_to_path[iid] = abs_path
+
+        # 展开所有分类节点
+        for node in tree.get_children():
+            tree.item(node, open=True)
+
+        # ── 操作：右键菜单 + 键盘快捷键 ──
+        ctx_menu = tk.Menu(root, tearoff=0, font=('TkDefaultFont', 10))
+
+        def _open_selected():
+            sel = tree.selection()
+            if not sel or len(sel) != 1:
+                return  # 只在单选时打开
+            iid = sel[0]
             if iid in iid_to_item:
                 item = iid_to_item[iid]
-                copy_list.append(item['path'].name if item['path'] is not None else item['name'])
+                if item['path'] is not None and not item['deleted']:
+                    open_in_file_manager(item['path'])
+                elif item['path'] is None:
+                    sources = item.get('sources', [])
+                    if sources:
+                        src_path = root_dir / sources[0]
+                        open_in_file_manager(src_path)
             elif iid in dyn_iid_to_path:
-                copy_list.append(dyn_iid_to_path[iid].name)
-        if copy_list:
-            root.clipboard_clear()
-            root.clipboard_append('\n'.join(copy_list))
+                open_in_file_manager(dyn_iid_to_path[iid])
 
-    def _on_rclick(event):
-        row = tree.identify_row(event.y)
-        if not row or (row not in iid_to_item and row not in dyn_iid_to_path):
-            return
-        # 如果右键点击的行不在当前选择中，重新选择该行
-        if row not in tree.selection():
-            tree.selection_set(row)
-        sel = tree.selection()
-        deletable_count = sum(1 for iid in sel
-                             if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None)
-        ctx_menu.delete(0, 'end')
-        if len(sel) > 1:
-            # 多选：只显示删除选项
-            if deletable_count > 0:
-                ctx_menu.add_command(label=f'删除 ({deletable_count} 项)', command=_delete_selected)
-        else:
-            # 单选：完整菜单
-            ctx_menu.add_command(label='打开定位', command=_open_selected)
-            ctx_menu.add_command(label='复制名称', command=_copy_name)
-            if deletable_count > 0:
-                ctx_menu.add_separator()
-                ctx_menu.add_command(label='删除文件', command=_delete_selected)
-        ctx_menu.post(event.x_root, event.y_root)
+        def _delete_selected():
+            sel = tree.selection()
+            if not sel:
+                return
+            # 过滤出可删除的项目（未删除且有路径）
+            deletable = [(iid, iid_to_item[iid]) for iid in sel
+                         if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None]
+            if not deletable:
+                return
+            # 确认对话框
+            count = len(deletable)
+            if count == 1:
+                item = deletable[0][1]
+                msg = f'确定要删除 {item["path"].name} 吗？\n\n{item["path"]}'
+            else:
+                msg = f'确定要删除选中的 {count} 个文件吗？\n\n此操作不可撤销。'
+            if not messagebox.askyesno('确认删除', msg):
+                return
+            # 批量删除
+            failed = []
+            for iid, item in deletable:
+                try:
+                    item['path'].unlink()
+                    item['deleted'] = True
+                    vals = list(tree.item(iid, 'values'))
+                    vals[2] = '已删除'
+                    tree.item(iid, values=vals, tags=('deleted',))
+                except Exception as e:
+                    failed.append(f'{item["path"].name}: {e}')
+            _update_deleted_count()
+            if failed:
+                messagebox.showerror('部分删除失败', '\n'.join(failed))
 
-    tree.bind('<Button-2>', _on_rclick)
-    tree.bind('<Button-3>', _on_rclick)
-    tree.bind('<Control-Button-1>', _on_rclick)
+        def _copy_name():
+            sel = tree.selection()
+            if not sel:
+                return
+            copy_list = []
+            for iid in sel:
+                if iid in iid_to_item:
+                    item = iid_to_item[iid]
+                    copy_list.append(item['path'].name if item['path'] is not None else item['name'])
+                elif iid in dyn_iid_to_path:
+                    copy_list.append(dyn_iid_to_path[iid].name)
+            if copy_list:
+                root.clipboard_clear()
+                root.clipboard_append('\n'.join(copy_list))
 
-    # 单击父节点行任意位置 → 切换展开/收起
-    def _on_click(event):
-        row = tree.identify_row(event.y)
-        if row and tree.get_children(row):
-            tree.item(row, open=not tree.item(row, 'open'))
-            return 'break'
+        def _on_rclick(event):
+            row = tree.identify_row(event.y)
+            if not row or (row not in iid_to_item and row not in dyn_iid_to_path):
+                return
+            # 记录点击坐标，过滤随后的合成 Motion 事件
+            _last_pos[0], _last_pos[1] = event.x, event.y
+            if row not in tree.selection():
+                tree.selection_set(row)
+            sel = tree.selection()
+            deletable_count = sum(1 for iid in sel
+                                 if iid in iid_to_item and not iid_to_item[iid]['deleted'] and iid_to_item[iid]['path'] is not None)
+            ctx_menu.delete(0, 'end')
+            if len(sel) > 1:
+                if deletable_count > 0:
+                    ctx_menu.add_command(label=f'删除 ({deletable_count} 项)', command=_delete_selected)
+            else:
+                ctx_menu.add_command(label='打开定位', command=_open_selected)
+                ctx_menu.add_command(label='复制名称', command=_copy_name)
+                if deletable_count > 0:
+                    ctx_menu.add_separator()
+                    ctx_menu.add_command(label='删除文件', command=_delete_selected)
+            ctx_menu.post(event.x_root, event.y_root)
 
-    tree.bind('<Button-1>', _on_click)
+        tree.bind('<Button-2>', _on_rclick)
+        tree.bind('<Button-3>', _on_rclick)
+        tree.bind('<Control-Button-1>', _on_rclick)
 
-    # 双击 → 打开
-    tree.bind('<Double-1>', lambda _e: _open_selected())
+        # 单击父节点行任意位置 → 切换展开/收起
+        def _on_click(event):
+            # 记录点击坐标，过滤 macOS 点击后产生的合成 Motion 事件
+            _last_pos[0], _last_pos[1] = event.x, event.y
+            row = tree.identify_row(event.y)
+            if row and tree.get_children(row):
+                tree.item(row, open=not tree.item(row, 'open'))
+                return 'break'
 
-    # 键盘快捷键
-    tree.bind('<Delete>', lambda _e: _delete_selected())
-    tree.bind('<BackSpace>', lambda _e: _delete_selected())
-    tree.bind('<Return>', lambda _e: _open_selected())
+        tree.bind('<Button-1>', _on_click)
 
-    # ── hover 效果 ──
-    _last_hover = [None]
+        # 双击 → 打开
+        tree.bind('<Double-1>', lambda _e: _open_selected())
 
-    def _on_motion(event):
-        row = tree.identify_row(event.y)
-        if row == _last_hover[0]:
-            return
-        if _last_hover[0]:
-            old_tags = list(tree.item(_last_hover[0], 'tags'))
-            old_tags = [t for t in old_tags if t != 'hover']
-            tree.item(_last_hover[0], tags=old_tags)
-        if row and (row in iid_to_item or row in dyn_iid_to_path):
-            if row in iid_to_item:
-                item = iid_to_item[row]
-                if not item['deleted'] and item['path'] is not None:
+        # 键盘快捷键
+        tree.bind('<Delete>', lambda _e: _delete_selected())
+        tree.bind('<BackSpace>', lambda _e: _delete_selected())
+        tree.bind('<Return>', lambda _e: _open_selected())
+
+        # ── hover 效果 ──
+        _last_hover = [None]
+        _last_pos = [None, None]  # 上次事件坐标，过滤合成 Motion
+
+        def _on_motion(event):
+            # macOS 点击后会生成坐标不变的合成 Motion，导致 hover 被重新加上
+            if event.x == _last_pos[0] and event.y == _last_pos[1]:
+                return
+            _last_pos[0], _last_pos[1] = event.x, event.y
+            row = tree.identify_row(event.y)
+            if row == _last_hover[0]:
+                return
+            if _last_hover[0]:
+                old_tags = list(tree.item(_last_hover[0], 'tags'))
+                old_tags = [t for t in old_tags if t != 'hover']
+                tree.item(_last_hover[0], tags=old_tags)
+            if row and (row in iid_to_item or row in dyn_iid_to_path):
+                if row in iid_to_item:
+                    item = iid_to_item[row]
+                    if not item['deleted'] and item['path'] is not None:
+                        new_tags = list(tree.item(row, 'tags'))
+                        new_tags.append('hover')
+                        tree.item(row, tags=new_tags)
+                elif row in dyn_iid_to_path:
                     new_tags = list(tree.item(row, 'tags'))
                     new_tags.append('hover')
                     tree.item(row, tags=new_tags)
-            elif row in dyn_iid_to_path:
-                new_tags = list(tree.item(row, 'tags'))
-                new_tags.append('hover')
-                tree.item(row, tags=new_tags)
-        _last_hover[0] = row
+            _last_hover[0] = row
 
-    def _on_leave(_e):
-        if _last_hover[0]:
-            old_tags = list(tree.item(_last_hover[0], 'tags'))
-            old_tags = [t for t in old_tags if t != 'hover']
-            tree.item(_last_hover[0], tags=old_tags)
-            _last_hover[0] = None
+        def _on_leave(_e):
+            if _last_hover[0]:
+                old_tags = list(tree.item(_last_hover[0], 'tags'))
+                old_tags = [t for t in old_tags if t != 'hover']
+                tree.item(_last_hover[0], tags=old_tags)
+                _last_hover[0] = None
 
-    tree.bind('<Motion>', _on_motion)
-    tree.bind('<Leave>', _on_leave)
+        tree.bind('<Motion>', _on_motion)
+        tree.bind('<Leave>', _on_leave)
 
-    # 进入时聚焦，确保滚轮事件生效
-    tree.bind('<Enter>', lambda _e: tree.focus_set())
+        # 进入时聚焦，确保滚轮事件生效
+        tree.bind('<Enter>', lambda _e: tree.focus_set())
 
-    # ── 布局 ──
-    tree.pack(side='left', fill='both', expand=True)
-    scrollbar.pack(side='right', fill='y')
+        # ── 布局 ──
+        tree.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
 
-    # ── 底部栏 ──
-    footer = tk.Frame(root, bg=C_BG, height=INTRO_HEIGHT)
-    footer.pack(fill='x', padx=PAD_X, pady=(2, PAD_X))
-    footer.pack_propagate(False)
+        # ── 底部栏 ──
+        footer = tk.Frame(container, bg=C_BG, height=INTRO_HEIGHT)
+        footer.pack(fill='x', padx=PAD_X, pady=(2, PAD_X))
+        footer.pack_propagate(False)
 
-    tk.Label(footer, text=str(root_dir), font=(MONO_FONT, 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='left')
+        tk.Label(footer, text=str(root_dir), font=(MONO_FONT, 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='left')
 
-    deleted_label = tk.Label(footer, text='', font=('TkDefaultFont', 9, 'bold'),
-                             fg=C_ACCENT_RED, bg=C_BG)
-    deleted_label.pack(side='left', padx=(8, 0))
+        deleted_label = tk.Label(footer, text='', font=('TkDefaultFont', 9, 'bold'),
+                                 fg=C_ACCENT_RED, bg=C_BG)
+        deleted_label.pack(side='left', padx=(8, 0))
 
-    tk.Label(footer, text='双击打开  ·  多选: Cmd/Ctrl+点击  ·  右键菜单  ·  ⌫ Delete 删除',
-             font=('TkDefaultFont', 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='right')
+        tk.Label(footer, text='双击打开  ·  多选: Cmd/Ctrl+点击  ·  右键菜单  ·  ⌫ Delete 删除',
+                 font=('TkDefaultFont', 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='right')
 
-    def _update_deleted_count():
-        d = sum(1 for it in items if it['deleted'])
-        deleted_label.configure(text=f'已删除 {d} 项' if d else '')
+        def _update_deleted_count():
+            d = sum(1 for it in state['items'] if it['deleted'])
+            deleted_label.configure(text=f'已删除 {d} 项' if d else '')
 
+    _build_content()
     root.mainloop()
 
 
