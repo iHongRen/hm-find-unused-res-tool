@@ -82,6 +82,19 @@ CAT_COLORS = {
 # ─── 内嵌图标（PNG，128x128）───
 ICON_DATA = 'iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAAE/0lEQVR4nO2dzXHUMBiGP+9QCamB4cKFCyVACkgDDKdUwCmTBihgNyVw4cKFSQ1JK+HAaPE6/pH0/cp6nwszZLEVvY8+SbbXDGTIy5e3L5bna5nh9DyYnEfz4AhcDi0hxA+K0PWRlEHsQAjeHgkR2AdA8P5wRDhwTozwY8DJococBB+X0mpQXAEQfmxK8ykSAOG3QUlO2QIg/LbIzStLAITfJjm5bQqA8NtmK79VARD+PljLcVEAhL8vlvJkXQgC7TMrAEb/PpnL9ZUACH/fTPPFFNA5FwJg9PfBOGdUgM45C4DR3xcpb1SAzoEAnTMQofz3DCpA50CAzoEAnXPA/N83b7wbcMHxybsFdlxfebeAiIiGEBWgp+CnOIsQqwL8+eXdAjvef/RuARFFWASm0d9T+ET/f1/n6ucvAHAFAnQOBOgcCNA5sXYBe2BudR94gYsKIMnS1i7Ilm8OCCDFVshBJYAAEuSGG1ACCMClNNRgEkCAzoEAnQMBOgcCcLm79W4BCwjA4ffPf3+WSBDsohAEkCJHgmDhE0GAetLoH7MmQcDwiSBAHXPhJ+YkCBo+EW4G6XB3S/Thk3crsrAXoPUHQNdG//RzuRKkPnF4QNR2Cugl/NrPH5/M+8hOAK1frLSTralpn6EENgJoh28hAeccgSXQF8DKZk0JJI4dVIJ2t4FzHYrpoJh2BVhi2sn3N7LH4xJM0jYF2OrE9PMUfq0EWmEFkqBNAXKYhn5/w68GkgSRoD0Bcjru8WH5Z7kSBAlIm7YE4Iaf2KoGnYRP1JoAW+SEPybSlOBEOzeDtkZlafiJJMHXH3nnkeDc1u/659pgHxWgNvwx9zfG4cegDQHWgpHs0McH3YCChU/UigBLaHWo9HG1xWIQX4Cl0a/doVKhBQ0+EVsAr/ClzhU8fKKWdgEJj05N53z3uezzDRC3AsyNfu+OzTm/dxsLiSvAlCgdu7Y2iNLGAmIKMB39ETt23KbAq/wt4q8BInds5LZlEq8CjEf/Djo4OrEEQPjmxBIggfDNiCNAGv0I35Q4AhAhfAfiCPDN/964KY7fBxwTaxvY+ncHG8RfgPEI6FEA59/ZX4AeQw+EvwC9kTPnTwfF8UltraD/v4ZhhPPCm/afsAhxdgF75PqKH9j0GMIDCgJoIV2ylSSAABpo7e0VJIAA0mhf2BGWAAJIYnVVT1ACCCCF9SVdIQkggAQ14Y9fCVf7ejgB6SAAl9rwS/4+5/yVVQACdA4E4OB8K/cMowpAgM7RFyDKKAGzoALUEk3symnARoBonQXO2FUASBAS2ykAEoTDfg0gcY8ciOH3SFirEuzsCafDcHoevBsB/MA2sHMgQOdAgFKYd9/UqPyq2YGICOsAY5ZCMl4YD6fnAV8M8WIctuOOCFNADdGmAcY3jc8CYBroi5Q3KkAtElUgPQvIPca4PYVcCIAqUElNgHNfALU4L13mjArAofbRbImHQsefZSwiXwmAKlCIxwsuGOFP852tAJCgEEsJBMMnwhQgR4kEtReChMr+mEUBUAUq4EigHP5Snpshq79BZI9IvtVD4FhrgzlrlEOCSuaqQM07gnL/3QxblTy7zEMCBpyFIaN65EzjRfM8JBAgRwaBBV7uGq54oQcJ4lOygC/eBmJ3EJvSfFhhohrEoXZgsi4EoRrEgJODWICoBvZIDEDxEQwR9JGsvKolHDLIoTXd/gVYRM4zNYdp+QAAAABJRU5ErkJggg=='
 
+# ─── 预编译正则（固定模式，只编译一次）───
+_RE_STATIC = re.compile(r'\$r\(\s*[\'"]app\.media\.(\w+)[\'"]\s*\)')
+_RE_TEMPLATE = re.compile(r'\$r\(\s*[`\'"]app\.media\.([^`\'"]*)\$\{[^}]+\}([^`\'"]*)[`\'"]?\s*\)')
+_RE_COMPILED_TEMPLATE = re.compile(r'params:\s*\[`app\.media\.([^`]*)\$\{[^}]+\}([^`]*)`\]')
+_RE_COMPILED_STATIC = re.compile(r'params:\s*\[[\'"]app\.media\.(\w+)[\'"]\]')
+_RE_TERNARY = re.compile(r'[\'"]app\.media\.(\w+)[\'"]')
+_RE_BARE_STR = re.compile(r'[\'"]app\.media\.([\w]+)[\'"]')
+_RE_MODULE_MEDIA = re.compile(r'["\']\[[\w]+\]\.media\.(\w+)["\']')
+_RE_RAWFILE = re.compile(r'\$rawfile\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
+_RE_GET_RAWFILE = re.compile(r'getRawFileContent\(\s*[\'"]([^\'"]+)[\'"]')
+_RE_RAWFILE_PATH = re.compile(r'["\']rawfile/([^"\']+)["\']')
+_RE_VAR_IN_TEMPLATE = re.compile(r'\$\{(\w+)')
+
 
 def format_size(size_bytes: int) -> str:
     if size_bytes < 1024:
@@ -95,36 +108,6 @@ def format_size(size_bytes: int) -> str:
 # ═══════════════════════════════════════════════
 # 扫描逻辑（不变）
 # ═══════════════════════════════════════════════
-
-def find_all_media_resources(root_dir: Path) -> dict[str, list[Path]]:
-    resources = {}
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        if 'media' not in Path(dirpath).parts:
-            continue
-        for filename in filenames:
-            ext = Path(filename).suffix.lower()
-            if ext in RESOURCE_EXTENSIONS:
-                name = Path(filename).stem
-                full_path = Path(dirpath) / filename
-                resources.setdefault(name, []).append(full_path)
-    return resources
-
-
-def find_rawfile_resources(root_dir: Path) -> dict[str, Path]:
-    resources = {}
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        if 'rawfile' not in Path(dirpath).parts:
-            continue
-        for filename in filenames:
-            ext = Path(filename).suffix.lower()
-            if ext in RESOURCE_EXTENSIONS:
-                parts = Path(dirpath).parts
-                rawfile_idx = parts.index('rawfile')
-                relative = str(Path(*parts[rawfile_idx + 1:]) / filename) if rawfile_idx + 1 < len(parts) else filename
-                resources[relative] = Path(dirpath) / filename
-    return resources
 
 
 def trace_variable_values(content: str, var_name: str) -> set[str]:
@@ -166,7 +149,8 @@ def trace_variable_values(content: str, var_name: str) -> set[str]:
     return valid_values
 
 
-def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names: set[str] = None) -> dict:
+def extract_refs_from_file(filepath: Path, root_dir: Path = None,
+                           rawfile_name_re: 're.Pattern | None' = None) -> dict:
     static_refs = set()
     prefix_refs = set()
     traced_refs = set()
@@ -181,15 +165,13 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
                 'dynamic_contexts': dynamic_contexts}
     lines = content.split('\n')
 
-    static_pattern = re.compile(r'\$r\(\s*[\'"]app\.media\.(\w+)[\'"]\s*\)')
-    for match in static_pattern.finditer(content):
+    for match in _RE_STATIC.finditer(content):
         static_refs.add(match.group(1))
 
-    template_pattern = re.compile(r'\$r\(\s*[`\'"]app\.media\.([^`\'"]*)\$\{[^}]+\}([^`\'"]*)[`\'"]?\s*\)')
-    for match in template_pattern.finditer(content):
+    for match in _RE_TEMPLATE.finditer(content):
         before_var, after_var = match.group(1), match.group(2)
         if before_var == '' and after_var == '':
-            var_match = re.search(r'\$\{(\w+)', match.group(0))
+            var_match = _RE_VAR_IN_TEMPLATE.search(match.group(0))
             if var_match:
                 var_name = var_match.group(1)
                 traced = trace_variable_values(content, var_name)
@@ -202,11 +184,10 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
         else:
             prefix_refs.add(before_var)
 
-    compiled_template_pattern = re.compile(r'params:\s*\[`app\.media\.([^`]*)\$\{[^}]+\}([^`]*)`\]')
-    for match in compiled_template_pattern.finditer(content):
+    for match in _RE_COMPILED_TEMPLATE.finditer(content):
         before_var, after_var = match.group(1), match.group(2)
         if before_var == '' and after_var == '':
-            var_match = re.search(r'\$\{(\w+)', match.group(0))
+            var_match = _RE_VAR_IN_TEMPLATE.search(match.group(0))
             if var_match:
                 var_name = var_match.group(1)
                 traced = trace_variable_values(content, var_name)
@@ -219,12 +200,10 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
         else:
             prefix_refs.add(before_var)
 
-    compiled_static_pattern = re.compile(r'params:\s*\[[\'"]app\.media\.(\w+)[\'"]\]')
-    for match in compiled_static_pattern.finditer(content):
+    for match in _RE_COMPILED_STATIC.finditer(content):
         static_refs.add(match.group(1))
 
-    ternary_pattern = re.compile(r'[\'"]app\.media\.(\w+)[\'"]')
-    for match in ternary_pattern.finditer(content):
+    for match in _RE_TERNARY.finditer(content):
         name = match.group(1)
         if name not in static_refs:
             start, end = max(0, match.start() - 50), min(len(content), match.end() + 50)
@@ -232,11 +211,10 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
             if '?' in ctx or ':' in ctx or 'params' in ctx:
                 static_refs.add(name)
 
-    bare_str_pattern = re.compile(r'[\'"]app\.media\.([\w]+)[\'"]')
-    for i, line in enumerate(lines):
+    for line in lines:
         comment_idx = line.find('//')
         effective_line = line[:comment_idx] if comment_idx >= 0 else line
-        for match in bare_str_pattern.finditer(effective_line):
+        for match in _RE_BARE_STR.finditer(effective_line):
             name = match.group(1)
             before = effective_line[:match.start()]
             if '$r(' in before or '$r (' in before:
@@ -244,72 +222,59 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None, rawfile_names:
             static_refs.add(name)
 
     # JSON 配置文件引用："[reslib].media.xxx" 或 "[xxx].media.xxx"
-    module_media_pattern = re.compile(r'["\']\[[\w]+\]\.media\.(\w+)["\']')
-    for match in module_media_pattern.finditer(content):
+    for match in _RE_MODULE_MEDIA.finditer(content):
         static_refs.add(match.group(1))
 
-    rawfile_pattern = re.compile(r'\$rawfile\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
-    for match in rawfile_pattern.finditer(content):
+    for match in _RE_RAWFILE.finditer(content):
         rawfile_refs.add(match.group(1))
 
-    get_rawfile_pattern = re.compile(r'getRawFileContent\(\s*[\'"]([^\'"]+)[\'"]')
-    for match in get_rawfile_pattern.finditer(content):
+    for match in _RE_GET_RAWFILE.finditer(content):
         rawfile_refs.add(match.group(1))
 
     # rawfile 路径引用：如 JSON/XML 中的 "rawfile/images/icon.png"
-    rawfile_path_pattern = re.compile(r'["\']rawfile/([^"\']+)["\']')
-    for match in rawfile_path_pattern.finditer(content):
+    for match in _RE_RAWFILE_PATH.finditer(content):
         rawfile_refs.add(match.group(1))
 
-    # 兜底：源码/配置中出现 rawfile 文件名即视为被引用（排除注释行）
-    if rawfile_names:
+    # 兜底：用预编译交替模式一次扫描所有行，O(lines) 替代 O(rawfile_names × lines)
+    if rawfile_name_re:
         suffix = filepath.suffix.lower()
-        is_config_file = suffix in {'.json', '.json5', '.xml'}
-        for name in rawfile_names:
-            for line in lines:
-                if name not in line:
-                    continue
-                if is_config_file:
-                    # 配置文件无 // 注释，直接视为引用
+        is_config_file = suffix in {'.json', '.json5', '.jsonc', '.xml', '.yaml', '.yml', '.toml'}
+        for line in lines:
+            m = rawfile_name_re.search(line)
+            if not m:
+                continue
+            name = m.group()
+            if name in rawfile_refs:
+                continue  # 已收集，跳过
+            if is_config_file:
+                rawfile_refs.add(name)
+            else:
+                comment_idx = line.find('//')
+                if comment_idx == -1 or m.start() < comment_idx:
                     rawfile_refs.add(name)
-                    break
-                else:
-                    # 源码排除 // 注释行
-                    comment_idx = line.find('//')
-                    if comment_idx == -1:
-                        rawfile_refs.add(name)
-                        break
-                    name_idx = line.index(name)
-                    if name_idx < comment_idx:
-                        rawfile_refs.add(name)
-                        break
 
     return {'static_refs': static_refs, 'prefix_refs': prefix_refs,
             'traced_refs': traced_refs, 'rawfile_refs': rawfile_refs,
             'dynamic_contexts': dynamic_contexts}
 
 
-def find_all_references(root_dir: Path, rawfile_names: set[str] = None):
+def find_all_references(root_dir: Path, source_files: list[Path],
+                        rawfile_name_re: 're.Pattern | None' = None):
     all_static_refs, all_prefix_refs, all_traced_refs = set(), set(), set()
     all_rawfile_refs, all_dynamic_contexts = set(), []
     ref_sources = {}  # name -> list of source file relative paths
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
-        for filename in filenames:
-            if Path(filename).suffix.lower() not in SOURCE_EXTENSIONS:
-                continue
-            filepath = Path(dirpath) / filename
-            rel_src = str(filepath.relative_to(root_dir))
-            result = extract_refs_from_file(filepath, root_dir, rawfile_names)
-            for name in result['static_refs']:
-                ref_sources.setdefault(name, []).append(rel_src)
-            for name in result['traced_refs']:
-                ref_sources.setdefault(name, []).append(rel_src)
-            all_static_refs.update(result['static_refs'])
-            all_prefix_refs.update(result['prefix_refs'])
-            all_traced_refs.update(result['traced_refs'])
-            all_rawfile_refs.update(result['rawfile_refs'])
-            all_dynamic_contexts.extend(result['dynamic_contexts'])
+    for filepath in source_files:
+        rel_src = str(filepath.relative_to(root_dir))
+        result = extract_refs_from_file(filepath, root_dir, rawfile_name_re)
+        for name in result['static_refs']:
+            ref_sources.setdefault(name, []).append(rel_src)
+        for name in result['traced_refs']:
+            ref_sources.setdefault(name, []).append(rel_src)
+        all_static_refs.update(result['static_refs'])
+        all_prefix_refs.update(result['prefix_refs'])
+        all_traced_refs.update(result['traced_refs'])
+        all_rawfile_refs.update(result['rawfile_refs'])
+        all_dynamic_contexts.extend(result['dynamic_contexts'])
     return all_static_refs, all_prefix_refs, all_traced_refs, all_rawfile_refs, all_dynamic_contexts, ref_sources
 
 
@@ -344,11 +309,55 @@ def open_in_file_manager(path: Path) -> bool:
 
 
 def analyze(root_dir: Path) -> dict:
-    """执行分析，返回结果字典。"""
-    media_resources = find_all_media_resources(root_dir)
-    rawfile_resources = find_rawfile_resources(root_dir)
-    rawfile_names = set(rawfile_resources.keys())
-    static_refs, prefix_refs, traced_refs, rawfile_refs, dynamic_contexts, ref_sources = find_all_references(root_dir, rawfile_names)
+    """执行分析，返回结果字典。单次 os.walk 同时完成资源收集和源码文件收集。"""
+    media_resources: dict[str, list[tuple[Path, int]]] = {}   # name -> [(path, size)]
+    rawfile_resources: dict[str, tuple[Path, int]] = {}       # rel_path -> (path, size)
+    source_files: list[Path] = []
+
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
+        parts = Path(dirpath).parts
+        in_media = 'media' in parts
+        in_rawfile = 'rawfile' in parts
+
+        for filename in filenames:
+            stem, ext = os.path.splitext(filename)
+            ext_lower = ext.lower()
+            full_path = Path(dirpath) / filename
+
+            # 收集 media 资源
+            if in_media and ext_lower in RESOURCE_EXTENSIONS:
+                try:
+                    size = full_path.stat().st_size
+                except OSError:
+                    continue
+                media_resources.setdefault(stem, []).append((full_path, size))
+
+            # 收集 rawfile 资源
+            if in_rawfile and ext_lower in RESOURCE_EXTENSIONS:
+                rawfile_idx = parts.index('rawfile')
+                if rawfile_idx + 1 < len(parts):
+                    relative = str(Path(*parts[rawfile_idx + 1:]) / filename)
+                else:
+                    relative = filename
+                try:
+                    size = full_path.stat().st_size
+                except OSError:
+                    continue
+                rawfile_resources[relative] = (full_path, size)
+
+            # 收集源码文件路径
+            if ext_lower in SOURCE_EXTENSIONS:
+                source_files.append(full_path)
+
+    # 预编译 rawfile 名称交替正则（一次编译，所有文件共用）
+    rawfile_name_re = None
+    if rawfile_resources:
+        escaped_names = [re.escape(n) for n in rawfile_resources]
+        rawfile_name_re = re.compile('|'.join(escaped_names))
+
+    static_refs, prefix_refs, traced_refs, rawfile_refs, dynamic_contexts, ref_sources = \
+        find_all_references(root_dir, source_files, rawfile_name_re)
 
     referenced = set()
     referenced.update(static_refs)
@@ -361,24 +370,25 @@ def analyze(root_dir: Path) -> dict:
 
     unused_media = {}
     potentially_used_media = {}
-    for name, paths in media_resources.items():
+    total_resource_size = 0
+    for name, path_sizes in media_resources.items():
+        total_resource_size += sum(s for _, s in path_sizes)
         if name in referenced:
             continue
+        paths = [p for p, _ in path_sizes]
         if name in potentially_used:
             potentially_used_media[name] = paths
             continue
-        total_size = sum(p.stat().st_size for p in paths)
+        total_size = sum(s for _, s in path_sizes)
         unused_media[name] = (paths, total_size)
 
     unused_rawfile = {}
-    for rel_path, full_path in rawfile_resources.items():
+    for rel_path, (full_path, size) in rawfile_resources.items():
+        total_resource_size += size
         if rel_path in rawfile_refs:
             continue
-        unused_rawfile[rel_path] = (full_path, full_path.stat().st_size)
+        unused_rawfile[rel_path] = (full_path, size)
 
-    total_resource_size = sum(
-        sum(p.stat().st_size for p in paths) for paths in media_resources.values()
-    ) + sum(fp.stat().st_size for fp in rawfile_resources.values())
     total_unused = sum(size for _, size in unused_media.values()) + sum(
         size for _, size in unused_rawfile.values()
     )
@@ -391,17 +401,22 @@ def analyze(root_dir: Path) -> dict:
         idx += 1
         all_items.append({'path': full_path, 'index': idx, 'size': size,
                           'name': rel_path, 'deleted': False, 'category': 'rawfile未使用'})
+    idx = 0
     for name, (paths, size) in sorted(unused_media.items(), key=lambda x: x[1][1], reverse=True):
         for p in paths:
             idx += 1
             all_items.append({'path': p, 'index': idx, 'size': size,
                               'name': name, 'deleted': False, 'category': 'media未使用'})
+    idx = 0
     for name, paths in sorted(potentially_used_media.items()):
-        size = sum(p.stat().st_size for p in paths)
+        # 从 media_resources 中取缓存的 size，避免再次 stat
+        path_sizes = media_resources.get(name, [])
+        size = sum(s for p2, s in path_sizes if p2 in paths)
         for p in paths:
             idx += 1
             all_items.append({'path': p, 'index': idx, 'size': size,
                               'name': name, 'deleted': False, 'category': '前缀匹配'})
+    idx = 0
     for name in sorted(missing):
         idx += 1
         sources = ref_sources.get(name, [])
@@ -597,13 +612,20 @@ def show_action_window(result: dict, root_dir: Path) -> None:
     cat_iid = None
     row_seq = 0
 
+    # 预计算各分类数量
+    cat_counts = {}
+    for item in items:
+        c = item.get('category', '')
+        cat_counts[c] = cat_counts.get(c, 0) + 1
+
     for item in items:
         cat = item.get('category', '')
         if cat != last_cat:
             last_cat = cat
             _, _, label_text = CAT_COLORS.get(cat, ('#e8e8e8', '#666', cat))
+            count = cat_counts.get(cat, 0)
             cat_iid = tree.insert('', 'end',
-                                 text=f' {label_text}',
+                                 text=f' {label_text}（{count}）',
                                  values=('', '', ''),
                                  tags=(f'cat_{cat}',))
             row_seq = 0
@@ -633,7 +655,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
     dynamic_contexts = result['dynamic_contexts']
     if dynamic_contexts:
         dyn_parent = tree.insert('', 'end',
-                                text=' ⚠ 无法追踪的动态引用（需人工确认）',
+                                text=f' ⚠ 无法追踪的动态引用（{len(dynamic_contexts)} 条，需人工确认）',
                                 values=('', '', ''),
                                 tags=('dyn_header',))
         for dc in dynamic_contexts:
