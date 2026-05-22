@@ -12,11 +12,14 @@
 """
 
 import base64
+import itertools
 import os
 import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from pathlib import Path
@@ -866,13 +869,31 @@ def show_action_window(result: dict, root_dir: Path) -> None:
 # 入口
 # ═══════════════════════════════════════════════
 
+def _run_with_spinner(label: str, fn, *args):
+    """在终端显示旋转动画，同时执行 fn(*args)，返回结果。"""
+    spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+    stop = threading.Event()
+    def _spin():
+        while not stop.is_set():
+            print(f'\r{next(spinner)} {label}', end='', flush=True)
+            time.sleep(0.08)
+    t = threading.Thread(target=_spin, daemon=True)
+    t.start()
+    try:
+        result = fn(*args)
+    finally:
+        stop.set()
+        t.join()
+        print('\r' + ' ' * (len(label) + 4) + '\r', end='', flush=True)
+    return result
+
+
 if __name__ == '__main__':
     arg_root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
     if not arg_root.is_dir():
         print(f'错误: {arg_root} 不是有效目录', file=sys.stderr)
         sys.exit(1)
 
-    print(f'正在分析: {arg_root} ...')
-    result = analyze(arg_root)
+    result = _run_with_spinner(f'正在分析: {arg_root}', analyze, arg_root)
     print('分析完成，打开 GUI 面板')
     show_action_window(result, arg_root)
