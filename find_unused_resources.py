@@ -34,6 +34,24 @@ RESOURCE_EXTENSIONS = {
     # 其他
     '.json', '.txt', '.pdf', '.docx', '.xlsx', '.pptx', '.zip',
 }
+SOURCE_EXTENSIONS = {
+    # 鸿蒙/TS
+    '.ets', '.ts', '.js', '.mjs', '.cjs',
+    # 配置
+    '.json', '.json5', '.jsonc',
+    '.xml', '.yaml', '.yml', '.toml',
+    '.properties', '.ini', '.cfg', '.conf',
+    # 样式
+    '.css', '.less', '.scss', '.sass',
+    # 文档/脚本
+    '.html', '.htm', '.md', '.txt',
+    '.sh', '.bat', '.ps1',
+    # 其他代码
+    '.java', '.kt', '.swift', '.dart', '.lua',
+    '.py', '.rb', '.php', '.go', '.rs', '.c', '.cpp', '.h', '.hpp',
+}
+
+# ─── 忽略目录 ───扫描时会跳过这些目录，避免误删第三方库或构建产物中的资源
 EXCLUDE_DIRS = {'oh_modules', 'node_modules', '.hvigor', 'build', '.preview', 'AppScope'}
 
 # ─── 字体 ───
@@ -278,6 +296,8 @@ def find_all_references(root_dir: Path, rawfile_names: set[str] = None):
     for dirpath, dirnames, filenames in os.walk(root_dir):
         dirnames[:] = [d for d in dirnames if d not in EXCLUDE_DIRS]
         for filename in filenames:
+            if Path(filename).suffix.lower() not in SOURCE_EXTENSIONS:
+                continue
             filepath = Path(dirpath) / filename
             rel_src = str(filepath.relative_to(root_dir))
             result = extract_refs_from_file(filepath, root_dir, rawfile_names)
