@@ -89,6 +89,7 @@ _RE_COMPILED_TEMPLATE = re.compile(r'params:\s*\[`app\.media\.([^`]*)\$\{[^}]+\}
 _RE_COMPILED_STATIC = re.compile(r'params:\s*\[[\'"]app\.media\.(\w+)[\'"]\]')
 _RE_TERNARY = re.compile(r'[\'"]app\.media\.(\w+)[\'"]')
 _RE_BARE_STR = re.compile(r'[\'"]app\.media\.([\w]+)[\'"]')
+_RE_BARE_RES_NAME = re.compile(r'[\'"](\w+_\w+)[\'"]')
 _RE_MODULE_MEDIA = re.compile(r'["\']\[[\w]+\]\.media\.(\w+)["\']')
 _RE_RAWFILE = re.compile(r'\$rawfile\(\s*[\'"]([^\'"]+)[\'"]\s*\)')
 _RE_GET_RAWFILE = re.compile(r'getRawFileContent\(\s*[\'"]([^\'"]+)[\'"]')
@@ -155,6 +156,7 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None,
     prefix_refs = set()
     traced_refs = set()
     rawfile_refs = set()
+    bare_refs = set()
     dynamic_contexts = []
     display_path = filepath.relative_to(root_dir) if root_dir else filepath
     try:
@@ -162,7 +164,7 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None,
     except Exception:
         return {'static_refs': static_refs, 'prefix_refs': prefix_refs,
                 'traced_refs': traced_refs, 'rawfile_refs': rawfile_refs,
-                'dynamic_contexts': dynamic_contexts}
+                'bare_refs': bare_refs, 'dynamic_contexts': dynamic_contexts}
     lines = content.split('\n')
 
     for match in _RE_STATIC.finditer(content):
@@ -220,6 +222,9 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None,
             if '$r(' in before or '$r (' in before:
                 continue
             static_refs.add(name)
+        # 裸资源名（含下划线，如 'ic_plus_red'），仅参与"已使用"判断
+        for match in _RE_BARE_RES_NAME.finditer(effective_line):
+            bare_refs.add(match.group(1))
 
     # JSON 配置文件引用："[reslib].media.xxx" 或 "[xxx].media.xxx"
     for match in _RE_MODULE_MEDIA.finditer(content):
@@ -255,13 +260,13 @@ def extract_refs_from_file(filepath: Path, root_dir: Path = None,
 
     return {'static_refs': static_refs, 'prefix_refs': prefix_refs,
             'traced_refs': traced_refs, 'rawfile_refs': rawfile_refs,
-            'dynamic_contexts': dynamic_contexts}
+            'bare_refs': bare_refs, 'dynamic_contexts': dynamic_contexts}
 
 
 def find_all_references(root_dir: Path, source_files: list[Path],
                         rawfile_name_re: 're.Pattern | None' = None):
     all_static_refs, all_prefix_refs, all_traced_refs = set(), set(), set()
-    all_rawfile_refs, all_dynamic_contexts = set(), []
+    all_rawfile_refs, all_bare_refs, all_dynamic_contexts = set(), set(), []
     ref_sources = {}  # name -> list of source file relative paths
     for filepath in source_files:
         rel_src = str(filepath.relative_to(root_dir))
@@ -274,8 +279,9 @@ def find_all_references(root_dir: Path, source_files: list[Path],
         all_prefix_refs.update(result['prefix_refs'])
         all_traced_refs.update(result['traced_refs'])
         all_rawfile_refs.update(result['rawfile_refs'])
+        all_bare_refs.update(result['bare_refs'])
         all_dynamic_contexts.extend(result['dynamic_contexts'])
-    return all_static_refs, all_prefix_refs, all_traced_refs, all_rawfile_refs, all_dynamic_contexts, ref_sources
+    return all_static_refs, all_prefix_refs, all_traced_refs, all_rawfile_refs, all_bare_refs, all_dynamic_contexts, ref_sources
 
 
 def is_prefix_match(name: str, prefixes: set[str]) -> bool:
@@ -356,12 +362,17 @@ def analyze(root_dir: Path) -> dict:
         escaped_names = [re.escape(n) for n in rawfile_resources]
         rawfile_name_re = re.compile('|'.join(escaped_names))
 
-    static_refs, prefix_refs, traced_refs, rawfile_refs, dynamic_contexts, ref_sources = \
+    static_refs, prefix_refs, traced_refs, rawfile_refs, bare_refs, dynamic_contexts, ref_sources = \
         find_all_references(root_dir, source_files, rawfile_name_re)
 
-    referenced = set()
-    referenced.update(static_refs)
-    referenced.update(traced_refs)
+    # 显式引用（$r / params / 模板等），用于"引用缺失"判断
+    explicit_refs = set()
+    explicit_refs.update(static_refs)
+    explicit_refs.update(traced_refs)
+
+    # 所有引用（含裸字符串），用于"未使用"判断
+    referenced = set(explicit_refs)
+    referenced.update(bare_refs)
 
     potentially_used = set()
     for name in media_resources:
@@ -393,7 +404,7 @@ def analyze(root_dir: Path) -> dict:
         size for _, size in unused_rawfile.values()
     )
 
-    missing = referenced - set(media_resources.keys())
+    missing = explicit_refs - set(media_resources.keys())
 
     all_items = []
     idx = 0
