@@ -8,7 +8,7 @@
     python3 find_unused_resources.py [项目根目录]
 
 默认项目根目录为当前工作目录。
-分析完成后会弹出 GUI 面板，支持查看、定位、删除资源。
+分析完成后会弹出 GUI 面板，支持查看、打开、删除资源。
 """
 
 import base64
@@ -513,7 +513,7 @@ def _build_stats_panel(parent: tk.Widget, result: dict):
 
 def show_action_window(result: dict, root_dir: Path) -> None:
     root = tk.Tk()
-    root.title('鸿蒙未使用源分析工具')
+    root.title('鸿蒙未使用资源分析工具')
     root.minsize(600, 400)
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
@@ -604,7 +604,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
     # ── 标题栏 ──
     title_bar = tk.Frame(root, bg=C_BG)
     title_bar.pack(fill='x', padx=PAD_X, pady=(10, 2))
-    tk.Label(title_bar, text='扫描项目中未使用的资源（media / rawfile），支持定位与删除',
+    tk.Label(title_bar, text='扫描项目中未使用的资源（media / rawfile），支持打开与删除',
              font=('TkDefaultFont', 11), fg=C_TEXT, bg=C_BG).pack(side='left')
     tk.Label(title_bar, text='python3 find_unused_resources.py [项目根目录]',
              font=(MONO_FONT, 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='right')
@@ -670,6 +670,14 @@ def show_action_window(result: dict, root_dir: Path) -> None:
 
         # ── 统计面板 ──
         _build_stats_panel(container, state['result'])
+
+        # ── 空内容占位 ──
+        if not state['items']:
+            placeholder = tk.Frame(container, bg=C_BG)
+            placeholder.pack(fill='both', expand=True)
+            tk.Label(placeholder, text='✓ 未检测到无用资源',
+                     font=('TkDefaultFont', 14), fg=C_ACCENT_GREEN, bg=C_BG).pack(expand=True)
+            return
 
         # ── Treeview 样式 ──
         style = ttk.Style()
@@ -898,7 +906,7 @@ def show_action_window(result: dict, root_dir: Path) -> None:
                 if deletable_count > 0:
                     ctx_menu.add_command(label=f'删除 ({deletable_count} 项)', command=_delete_selected)
             else:
-                ctx_menu.add_command(label='打开定位', command=_open_selected)
+                ctx_menu.add_command(label='打开', command=_open_selected)
                 ctx_menu.add_command(label='复制名称', command=_copy_name)
                 if deletable_count > 0:
                     ctx_menu.add_separator()
