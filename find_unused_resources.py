@@ -20,8 +20,9 @@ import sys
 import tempfile
 import threading
 import time
+from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 
 # ─── 常量 ───
@@ -536,6 +537,70 @@ def show_action_window(result: dict, root_dir: Path) -> None:
 
     items = result['all_items']
 
+    # ── 导出功能 ──
+    def _export_report():
+        default_name = f'unused_resources_{root_dir.name}.txt'
+        filepath = filedialog.asksaveasfilename(
+            parent=root,
+            title='导出分析报告',
+            initialdir=str(root_dir),
+            initialfile=default_name,
+            defaultextension='.txt',
+            filetypes=[('文本文件', '*.txt'), ('所有文件', '*.*')]
+        )
+        if not filepath:
+            return
+        lines = []
+        lines.append(f'未使用资源分析报告')
+        lines.append(f'项目目录: {root_dir}')
+        lines.append(f'分析时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+        lines.append(f'{"=" * 60}')
+        lines.append(f'')
+        lines.append(f'统计概览')
+        lines.append(f'{"-" * 40}')
+        lines.append(f'media 资源: {result["media_count"]} 个')
+        lines.append(f'rawfile 资源: {result["rawfile_count"]} 个')
+        lines.append(f'静态引用: {result["static_count"]} 个')
+        lines.append(f'前缀引用: {result["prefix_count"]} 个')
+        lines.append(f'变量引用: {result["traced_count"]} 个')
+        lines.append(f'rawfile 引用: {result["rawfile_ref_count"]} 个')
+        lines.append(f'未使用 media: {result["unused_media_count"]} 个')
+        lines.append(f'未使用 rawfile: {result["unused_rawfile_count"]} 个')
+        lines.append(f'前缀匹配: {result["pot_count"]} 个')
+        lines.append(f'引用缺失: {result["missing_count"]} 个')
+        lines.append(f'资源总大小: {format_size(result["total_resource_size"])}')
+        lines.append(f'可释放空间: {format_size(result["total_unused"])}')
+        lines.append(f'')
+        cat_map = {}
+        for item in items:
+            cat = item.get('category', '其他')
+            cat_map.setdefault(cat, []).append(item)
+        for cat_key, (_, _, cat_label) in CAT_COLORS.items():
+            cat_items = cat_map.get(cat_key, [])
+            if not cat_items:
+                continue
+            lines.append(f'{cat_label}（{len(cat_items)}）')
+            lines.append(f'{"-" * 40}')
+            for item in cat_items:
+                name = item['name']
+                size = format_size(item['size']) if item['path'] else '-'
+                path = str(item['path'].relative_to(root_dir)) if item['path'] else ', '.join(item.get('sources', []))
+                status = '已删除' if item['deleted'] else ('文件不存在' if item['path'] is None else '')
+                lines.append(f'  {name:<40} {size:>10}  {path}  {status}')
+            lines.append(f'')
+        if result['dynamic_contexts']:
+            lines.append(f'无法追踪的动态引用（{len(result["dynamic_contexts"])} 条，需人工确认）')
+            lines.append(f'{"-" * 40}')
+            for desc, line_content in result['dynamic_contexts']:
+                lines.append(f'  {desc}')
+                lines.append(f'    {line_content}')
+            lines.append(f'')
+        try:
+            Path(filepath).write_text('\n'.join(lines), encoding='utf-8')
+            messagebox.showinfo('导出成功', f'报告已保存至:\n{filepath}')
+        except Exception as e:
+            messagebox.showerror('导出失败', str(e))
+
     # ── 标题栏 ──
     title_bar = tk.Frame(root, bg=C_BG)
     title_bar.pack(fill='x', padx=PAD_X, pady=(10, 2))
@@ -543,6 +608,12 @@ def show_action_window(result: dict, root_dir: Path) -> None:
              font=('TkDefaultFont', 11), fg=C_TEXT, bg=C_BG).pack(side='left')
     tk.Label(title_bar, text='python3 find_unused_resources.py [项目根目录]',
              font=(MONO_FONT, 9), fg=C_TEXT_SEC, bg=C_BG).pack(side='right')
+
+    # 导出按钮
+    export_btn = tk.Label(title_bar, text='导出报告', font=('TkDefaultFont', 9),
+                          bg=C_BG, fg=C_ACCENT_BLUE)
+    export_btn.pack(side='right', padx=(0, 10))
+    export_btn.bind('<Button-1>', lambda e: _export_report())
 
     # ── 统计面板 ──
     _build_stats_panel(root, result)
