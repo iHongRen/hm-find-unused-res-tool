@@ -2,7 +2,7 @@
 
 扫描 HarmonyOS 项目中未使用的资源，分析完成后弹出 GUI 面板，支持查看、定位、删除。
 
-环境要求：Python9+
+环境要求：Python 3.9+
 
 ## 用法
 
@@ -16,9 +16,14 @@ python3 find_unused_resources.py [项目根目录]
 
 - 扫描 `src/main/resources/base/media/` 目录下的所有资源
 - 扫描 `src/main/resources/base/rawfile/` 目录下的所有资源
-- 在 `.ets` / `.ts` 源码中搜索 `$r('app.media.xxx')` 和 `$rawfile('xxx')` 引用
+- 在源码中搜索 `$r('app.media.xxx')`、`$rawfile('xxx')`、`getRawFileContent('xxx')` 引用
 - 追踪模板字符串中的动态引用（如 `$r('app.media.${iconName}')`）
+- 追踪变量赋值，尝试解析动态引用的实际值
+- 识别编译模板引用（如 `params: ['app.media.${var}']`）
 - 识别前缀匹配（引用 `icon_` 前缀时，`icon_home`、`icon_1` 等视为可能被引用）
+- 识别裸资源名引用（如 `'ic_plus_red'` 出现在代码中，参与"已使用"判断）
+- 识别 JSON 配置文件中的模块引用（如 `"[reslib].media.xxx"`）
+- 识别 rawfile 路径引用（如 `"rawfile/images/icon.png"`）
 - 检测引用缺失（代码中引用了但资源不存在）
 
 支持的资源类型：
@@ -28,6 +33,14 @@ python3 find_unused_resources.py [项目根目录]
 - **视频**：mp4, avi, mkv, mov, wmv, flv, m4v, 3gp
 - **字体**：ttf, otf
 - **其他**：json, txt, pdf, docx, xlsx, pptx, zip
+
+扫描的源码文件类型：
+
+- **鸿蒙/TS**：ets, ts, js, mjs, cjs
+- **配置文件**：json, json5, jsonc, xml, yaml, yml, toml, properties, ini, cfg, conf
+- **样式文件**：css, less, scss, sass
+- **文档/脚本**：html, htm, md, txt, sh, bat, ps1
+- **其他代码**：java, kt, swift, dart, lua, py, rb, php, go, rs, c, cpp, h, hpp
 
 ## 分析分类
 
@@ -42,12 +55,14 @@ python3 find_unused_resources.py [项目根目录]
 
 ![](./screenshots/demo.gif)
 
-分析完成后自动弹出 GUI 面板：
+分析完成后自动弹出 GUI 面板（终端显示加载动画）：
 
-- 顶部统计卡片：资源数量、引用数量、可释放空间等
-- 列表视图：分类显示未使用资源，交替行背景、hover 高亮
+- 顶部统计卡片：资源数量、引用数量、可释放空间等（分类着色）
+- 列表视图：按分类分组显示，交替行背景、hover 高亮
+- 导出报告：标题栏"导出报告"按钮，生成包含统计概览和分类明细的 TXT 报告
 - 操作方式：
   - 双击 → 在文件管理器中定位
+  - 多选 → Cmd/Ctrl + 点击，支持批量删除
   - 右键菜单 → 打开定位 / 复制名称 / 删除文件
   - 键盘 → `Delete` 或 `⌫` 删除，`Return` 打开
 
