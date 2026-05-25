@@ -29,9 +29,9 @@ python3 find_unused_resources.py [项目根目录]
 
 
 
-# 作者 [@仙银](https://github.com/iHongRen)
+# 作者 
 
-鸿蒙开源作品，欢迎持续关注 [Star](https://github.com/iHongRen/https://github.com/iHongRen/) ，[赞助](https://ihongren.github.io/donate.html)
+[@仙银](https://github.com/iHongRen) 鸿蒙开源作品，欢迎持续关注
 
 1、[hpack](https://github.com/iHongRen/hpack) - 鸿蒙 HarmonyOS 一键打包上传分发测试工具
 
@@ -52,3 +52,5 @@ python3 find_unused_resources.py [项目根目录]
 9、[hm-app-check-tool](https://github.com/iHongRen/hm-app-check-tool) - macOS 鸿蒙扫描工具，扫描HAP、HSP、App包内容并输出检测结果报告
 
 10、[hm-find-unused-res-tool](https://github.com/iHongRen/hm-find-unused-res-tool) - 鸿蒙无用资源清理工具，一个有UI的 Python 脚本
+
+11、[harmony-study-demo](https://github.com/iHongRen/harmony-study-demo) - HarmonyOS 应用开发学习项目，包含了多个实用的功能示例
